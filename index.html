@@ -1,0 +1,647 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>WebForge Engine — редактор</title>
+<style>
+  :root{--bg:#1e1e1e;--bg2:#252526;--bg3:#2d2d30;--border:#3c3c3c;--txt:#d4d4d4;--accent:#4f8cff;--accent2:#2ea043;--sel:#094771;}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden;font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;color:var(--txt);background:var(--bg)}
+  #topbar{height:40px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;padding:0 12px}
+  #topbar .logo{font-weight:700;color:var(--accent);letter-spacing:.5px;font-size:14px}
+  button{background:#0e639c;color:#fff;border:none;border-radius:3px;padding:5px 12px;cursor:pointer;font-size:12px}
+  button:hover{background:#1177bb}
+  button.play{background:var(--accent2)}button.play:hover{background:#3fb950}
+  button.stop{background:#a1260c}button.stop:hover{background:#c0392b}
+  button.ghost{background:#3a3d41}
+  select,input[type=text],input[type=number]{background:var(--bg);border:1px solid var(--border);color:var(--txt);border-radius:3px;padding:3px 6px;font-size:12px;width:100%}
+  #layout{display:flex;height:calc(100% - 40px)}
+  .panel{background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column}
+  .panel:last-child{border-right:none;border-left:1px solid var(--border)}
+  .panel h3{background:var(--bg3);padding:6px 10px;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#bbb;border-bottom:1px solid var(--border)}
+  #hierarchy{width:220px}
+  #hierarchy .list{flex:1;overflow-y:auto;padding:4px}
+  .item{padding:4px 8px;border-radius:3px;cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap}
+  .item:hover{background:var(--bg3)}
+  .item.sel{background:var(--sel)}
+  .item .eye{margin-left:auto;opacity:.6}
+  #inspector{width:280px}
+  #inspector .body{flex:1;overflow-y:auto;padding:8px}
+  .comp{border:1px solid var(--border);border-radius:4px;margin-bottom:8px;background:var(--bg)}
+  .comp>h4{background:var(--bg3);padding:5px 8px;font-size:11px;color:#9cdcfe}
+  .comp .fields{padding:8px}
+  .row{display:grid;grid-template-columns:80px 1fr;gap:6px;align-items:center;margin-bottom:5px}
+  .row label{color:#aaa;font-size:11px}
+  .vec{display:flex;gap:4px}
+  .vec input{width:100%}
+  .vec span{color:#888;font-size:10px;align-self:center}
+  #viewport{flex:1;position:relative;background:#1a1a1a;display:flex;flex-direction:column;min-width:0}
+  #vp-toolbar{height:32px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;padding:0 10px;font-size:11px;color:#aaa}
+  #cv-wrap{flex:1;position:relative}
+  canvas#cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  #stats{position:absolute;right:8px;bottom:8px;background:rgba(0,0,0,.55);padding:4px 10px;border-radius:4px;font-size:11px;font-family:monospace;color:#7ee787;pointer-events:none}
+  #bottom{height:170px;background:var(--bg2);border-top:1px solid var(--border);display:flex;flex-direction:column}
+  #console{flex:1;overflow-y:auto;padding:6px 10px;font-family:Consolas,monospace;font-size:12px}
+  #console .line{padding:1px 0}
+  #console .err{color:#f48771}#console .warn{color:#dcdcaa}#console .ok{color:#7ee787}
+  #assets-bar{display:flex;gap:6px;padding:6px 10px;border-top:1px solid var(--border);flex-wrap:wrap}
+  .asset{background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:4px 10px;cursor:grab;font-size:11px}
+  .asset:hover{border-color:var(--accent);color:#fff}
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:50}
+  .modal .box{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:18px;width:460px;max-width:92vw}
+  .modal h2{font-size:15px;margin-bottom:12px;color:#fff}
+  .modal textarea{width:100%;height:220px;background:#1b1b1b;color:#9cdcfe;border:1px solid var(--border);border-radius:4px;font-family:Consolas,monospace;font-size:12px;padding:8px;resize:vertical}
+  .modal .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
+  .tag{display:inline-block;background:#0e639c;color:#fff;border-radius:3px;font-size:9px;padding:1px 5px;margin-left:4px;vertical-align:middle}
+</style>
+</head>
+<body>
+<div id="topbar">
+  <span class="logo">⚒ WebForge</span>
+  <button class="ghost" onclick="UI.addEntity()">+ Объект</button>
+  <button class="ghost" onclick="UI.addEntity('player')">+ Игрок</button>
+  <button class="ghost" onclick="UI.duplicate()">Дублировать</button>
+  <button class="ghost" onclick="UI.remove()">Удалить</button>
+  <span style="flex:1"></span>
+  <button class="play" id="btnPlay" onclick="Engine.togglePlay()">▶ Play</button>
+  <button class="stop" onclick="Engine.togglePlay(true)">■ Stop</button>
+  <span style="flex:1"></span>
+  <button class="ghost" onclick="UI.saveScene()">💾 Сохранить</button>
+  <button class="ghost" onclick="UI.loadScene()">📂 Загрузить</button>
+</div>
+<div id="layout">
+  <div class="panel" id="hierarchy">
+    <h3>Иерархия</h3>
+    <div class="list" id="entityList"></div>
+  </div>
+  <div id="viewport">
+    <div id="vp-toolbar">
+      <span>Инструмент:</span>
+      <label><input type="radio" name="tool" checked onchange="UI.tool='move'"> Move</label>
+      <label><input type="radio" name="tool" onchange="UI.tool='select'"> Select</label>
+      <span style="margin-left:14px">Сетка: <input type="checkbox" id="gridChk" checked></span>
+      <span style="margin-left:14px;color:#888">Камера: колесо — зум, Shift+drag — панорама</span>
+      <span style="margin-left:auto" id="modeLabel">РЕЖИМ РЕДАКТОРА</span>
+    </div>
+    <div id="cv-wrap"><canvas id="cv"></canvas><div id="stats">FPS: --</div></div>
+    <div id="bottom">
+      <div id="console"></div>
+      <div id="assets-bar">
+        <span style="align-self:center;color:#aaa;font-size:11px">Префабы (перетащи во вьюпорт):</span>
+        <span class="asset" draggable="true" data-kind="box">📦 Box</span>
+        <span class="asset" draggable="true" data-kind="ball">⚪ Ball</span>
+        <span class="asset" draggable="true" data-kind="ground">🟩 Ground</span>
+        <span class="asset" draggable="true" data-kind="enemy">👾 Enemy</span>
+        <span class="asset" draggable="true" data-kind="spawner">✨ Spawner</span>
+        <span class="asset" draggable="true" data-kind="text">🔤 Text</span>
+      </div>
+    </div>
+  </div>
+  <div class="panel" id="inspector">
+    <h3>Инспектор</h3>
+    <div class="body" id="inspBody"><div style="color:#777;padding:10px">Выберите объект</div></div>
+  </div>
+</div>
+<div id="scriptModal" class="modal" style="display:none">
+  <div class="box">
+    <h2>Редактор скрипта</h2>
+    <p style="color:#aaa;font-size:11px;margin-bottom:8px">API: <code>self.entity</code>, <code>Input.isDown('ArrowLeft')</code>, <code>Time.dt</code>, <code>self.find(name)</code>, <code>self.log(msg)</code>. Определи <code>self.start</code> и <code>self.update(dt)</code>.</p>
+    <textarea id="scriptCode" spellcheck="false"></textarea>
+    <div class="actions"><button class="ghost" onclick="UI.closeScript()">Отмена</button><button onclick="UI.applyScript()">Применить</button></div>
+  </div>
+</div>
+<script>
+/* ============ ЯДРО ДВИЖКА ============ */
+const Log = {
+  el: null,
+  push(msg, cls) {
+    if (!this.el) this.el = document.getElementById('console');
+    const d = document.createElement('div');
+    d.className = 'line ' + (cls || '');
+    d.textContent = '▸ ' + msg;
+    this.el.appendChild(d);
+    this.el.scrollTop = this.el.scrollHeight;
+  }
+};
+
+const Time = { dt: 0, time: 0, frame: 0 };
+
+const Input = {
+  keys: new Set(),
+  isDown(k) { return this.keys.has(k); },
+  init() {
+    window.addEventListener('keydown', e => this.keys.add(e.key));
+    window.addEventListener('keyup', e => this.keys.delete(e.key));
+    window.addEventListener('blur', () => this.keys.clear());
+  }
+};
+
+const GRAVITY = 900;
+class Entity {
+  constructor(name, opts = {}) {
+    this.id = ++Entity._id;
+    this.name = name || 'Object';
+    this.visible = true;
+    this.position = { x: opts.x || 0, y: opts.y || 0 };
+    this.rotation = opts.rotation || 0;
+    this.scale = { x: opts.sx || 1, y: opts.sy || 1 };
+    this.velocity = { x: 0, y: 0 };
+    this.components = [];
+    if (opts.comps) opts.comps.forEach(c => this.addComponent(c));
+  }
+  addComponent(c) { c.entity = this; this.components.push(c); return c; }
+  getComponent(type) { return this.components.find(c => c.type === type); }
+  get hasPhysics() { return !!this.getComponent('physics'); }
+  get rect() {
+    const s = this.getComponent('sprite') || {};
+    const w = (s.width || (s.radius ? s.radius * 2 : 40)) * this.scale.x;
+    const h = (s.height || (s.radius ? s.radius * 2 : 40)) * this.scale.y;
+    return { x: this.position.x - w / 2, y: this.position.y - h / 2, w, h };
+  }
+}
+Entity._id = 0;
+
+/* --- Компоненты (как в Unity: компонентная архитектура) --- */
+class Sprite {
+  constructor(o = {}) { this.type = 'sprite'; this.shape = o.shape || 'rect'; this.color = o.color || '#4f8cff'; this.width = o.width || 40; this.height = o.height || 40; this.radius = o.radius || 20; }
+}
+class Physics {
+  constructor(o = {}) { this.type = 'physics'; this.gravity = o.gravity !== undefined ? o.gravity : 1; this.isStatic = !!o.isStatic; this.bounciness = o.bounciness || 0; this.friction = o.friction !== undefined ? o.friction : 0.1; this.grounded = false; }
+}
+class TextComp {
+  constructor(o = {}) { this.type = 'text'; this.text = o.text || 'Text'; this.size = o.size || 20; this.color = o.color || '#fff'; }
+}
+class Spawner {
+  constructor(o = {}) { this.type = 'spawner'; this.interval = o.interval || 1; this.prefab = o.prefab || 'ball'; this.timer = 0; }
+}
+class Script {
+  constructor(code) { this.type = 'script'; this.code = code || ''; this.instance = null; }
+}
+
+/* --- Скриптовое API: компиляция поведения игрока/врага --- */
+function compileScript(ent, code) {
+  const api = {
+    entity: ent,
+    find(name) { return Engine.scene.find(e => e.name === name); },
+    log: m => Log.push('[script] ' + m, 'ok')
+  };
+  try {
+    const fn = new Function('self', 'Input', 'Time', 'Log', 'Engine', '"use strict";\n' + code);
+    fn(api, Input, Time, Log, Engine);
+    return api;
+  } catch (err) { Log.push('Ошибка компиляции скрипта: ' + err.message, 'err'); return null; }
+}
+
+const DEFAULT_PLAYER_SCRIPT = `// self.entity — объект, к которому прикреплён скрипт
+self.start = () => { self.speed = 260; };
+self.update = (dt) => {
+  const e = self.entity;
+  if (Input.isDown('ArrowLeft') || Input.isDown('a')) e.velocity.x = -self.speed;
+  else if (Input.isDown('ArrowRight') || Input.isDown('d')) e.velocity.x = self.speed;
+  else e.velocity.x *= 0.8;
+  if ((Input.isDown('ArrowUp') || Input.isDown('w') || Input.isDown(' ')) && e.getComponent('physics').grounded) {
+    e.velocity.y = -420; e.getComponent('physics').grounded = false;
+  }
+};`;
+
+const DEFAULT_ENEMY_SCRIPT = `self.start = () => { self.t = 0; };
+self.update = (dt) => {
+  self.t += dt;
+  self.entity.position.x += Math.sin(self.t * 2) * 120 * dt;
+};`;
+
+const DEFAULT_SPAWNER_SCRIPT = `self.update = (dt) => {
+  const sp = self.entity.getComponent('spawner');
+  sp.timer += dt;
+  if (sp.timer >= sp.interval) {
+    sp.timer = 0;
+    const ball = Engine.spawnPrefab(sp.prefab, self.entity.position.x, self.entity.position.y);
+    ball.velocity.x = (Math.random() - 0.5) * 300;
+  }
+};`;
+
+/* ============ ДВИЖОК ============ */
+const Engine = {
+  scene: [], selected: null, playing: false, editSnapshot: null,
+  camera: { x: 0, y: 0, zoom: 1 },
+
+  spawnPrefab(kind, x, y) {
+    const e = Prefabs.create(kind, x, y);
+    this.scene.push(e);
+    UI.renderHierarchy();
+    return e;
+  },
+
+  togglePlay(forceStop) {
+    if (this.playing || forceStop) {
+      this.playing = false;
+      if (this.editSnapshot) this.scene = JSON.parse(this.editSnapshot);
+      this.selected = null;
+      document.getElementById('btnPlay').textContent = '▶ Play';
+      const ml = document.getElementById('modeLabel');
+      ml.textContent = 'РЕЖИМ РЕДАКТОРА'; ml.style.color = '#aaa';
+      Log.push('Симуляция остановлена, сцена восстановлена.', 'warn');
+    } else {
+      this.editSnapshot = JSON.stringify(this.scene);
+      this.scene.forEach(e => {
+        const sc = e.getComponent('script');
+        if (sc) { sc.instance = compileScript(e, sc.code); if (sc.instance && sc.instance.start) sc.instance.start(); }
+      });
+      this.playing = true;
+      document.getElementById('btnPlay').textContent = '⏸ Пауза';
+      const ml = document.getElementById('modeLabel');
+      ml.textContent = '▶ РЕЖИМ ИГРЫ'; ml.style.color = '#3fb950';
+      Log.push('Симуляция запущена (' + this.scene.length + ' объектов).', 'ok');
+    }
+    UI.renderHierarchy(); UI.renderInspector();
+  },
+
+  physicsStep(dt) {
+    const ents = this.scene.filter(e => e.visible && e.hasPhysics);
+    ents.forEach(e => {
+      const p = e.getComponent('physics');
+      if (!p.isStatic) {
+        e.velocity.y += GRAVITY * p.gravity * dt;
+        e.position.x += e.velocity.x * dt;
+        e.position.y += e.velocity.y * dt;
+        p.grounded = false;
+      }
+    });
+    const solids = ents.filter(e => e.getComponent('physics').isStatic);
+    const dynamic = ents.filter(e => !e.getComponent('physics').isStatic);
+    dynamic.forEach(a => {
+      const pa = a.getComponent('physics');
+      solids.forEach(b => {
+        const ra = a.rect, rb = b.rect;
+        if (ra.x < rb.x + rb.w && ra.x + ra.w > rb.x && ra.y < rb.y + rb.h && ra.y + ra.h > rb.y) {
+          const overlapX = Math.min(ra.x + ra.w, rb.x + rb.w) - Math.max(ra.x, rb.x);
+          const overlapY = Math.min(ra.y + ra.h, rb.y + rb.h) - Math.max(ra.y, rb.y);
+          if (overlapY < overlapX) {
+            if (a.position.y < b.position.y) {
+              a.position.y -= overlapY;
+              a.velocity.y = -a.velocity.y * pa.bounciness;
+              pa.grounded = a.velocity.y < 40;
+            } else { a.position.y += overlapY; a.velocity.y = -Math.abs(a.velocity.y) * pa.bounciness; }
+            if (Math.abs(a.velocity.y) < 20) a.velocity.y = 0;
+          } else {
+            if (a.position.x < b.position.x) a.position.x -= overlapX; else a.position.x += overlapX;
+            a.velocity.x = -a.velocity.x * pa.bounciness;
+          }
+          a.velocity.x *= (1 - pa.friction * 0.5);
+        }
+      });
+    });
+    dynamic.forEach(a => { if (a.position.y > 2000) { a.position.y = -200; a.velocity.y = 0; } });
+  },
+
+  update(dt) {
+    if (!this.playing) return;
+    Time.dt = dt; Time.time += dt; Time.frame++;
+    this.scene.forEach(e => {
+      const sc = e.getComponent('script');
+      if (sc && sc.instance && sc.instance.update) {
+        try { sc.instance.update(dt); } catch (err) { Log.push('Ошибка в update: ' + err.message, 'err'); sc.instance = null; }
+      }
+    });
+    this.physicsStep(dt);
+    if (Time.frame % 30 === 0) document.getElementById('stats').textContent = 'FPS: ' + Math.round(1 / dt) + ' | Объектов: ' + this.scene.length;
+  }
+};
+
+/* --- Префабы --- */
+const Prefabs = {
+  create(kind, x = 0, y = 0) {
+    const map = {
+      box: () => new Entity('Box', { x, y, comps: [new Sprite({ color: '#c58f5a', width: 50, height: 50 }), new Physics()] }),
+      ball: () => new Entity('Ball', { x, y, comps: [new Sprite({ shape: 'circle', color: '#e2c93d', radius: 16 }), new Physics({ bounciness: 0.6 })] }),
+      ground: () => new Entity('Ground', { x, y, comps: [new Sprite({ color: '#3fb950', width: 400, height: 30 }), new Physics({ isStatic: true })] }),
+      player: () => {
+        const e = new Entity('Player', { x, y: -80, comps: [new Sprite({ color: '#4f8cff', width: 36, height: 56 }), new Physics()] });
+        e.addComponent(new Script(DEFAULT_PLAYER_SCRIPT));
+        return e;
+      },
+      enemy: () => {
+        const e = new Entity('Enemy', { x, y, comps: [new Sprite({ color: '#d64545', width: 40, height: 40 }), new Physics()] });
+        e.addComponent(new Script(DEFAULT_ENEMY_SCRIPT));
+        return e;
+      },
+      spawner: () => {
+        const e = new Entity('Spawner', { x, y, comps: [new Sprite({ shape: 'circle', color: '#b567f0', radius: 14 }), new Physics({ isStatic: true }), new Spawner({ interval: 1.2, prefab: 'ball' })] });
+        e.addComponent(new Script(DEFAULT_SPAWNER_SCRIPT));
+        return e;
+      },
+      text: () => new Entity('Text', { x, y, comps: [new TextComp({ text: 'Hello WebForge!' })] })
+    };
+    return (map[kind] || map.box)();
+  }
+};
+
+/* ============ РЕНДЕР ============ */
+const Viewport = {
+  cv: null, ctx: null, dragging: false, dragEntity: null, panning: false, panStart: null,
+  init() {
+    this.cv = document.getElementById('cv');
+    this.ctx = this.cv.getContext('2d');
+    const ro = () => { const r = this.cv.getBoundingClientRect(); this.cv.width = r.width; this.cv.height = r.height; };
+    new ResizeObserver(ro).observe(this.cv); ro();
+    this.bindEvents();
+  },
+  toWorld(px, py) {
+    const cx = this.cv.width / 2, cy = this.cv.height / 2;
+    return { x: (px - cx) / Engine.camera.zoom - Engine.camera.x, y: (py - cy) / Engine.camera.zoom - Engine.camera.y };
+  },
+  toScreen(wx, wy) {
+    const cx = this.cv.width / 2, cy = this.cv.height / 2;
+    return { x: (wx + Engine.camera.x) * Engine.camera.zoom + cx, y: (wy + Engine.camera.y) * Engine.camera.zoom + cy };
+  },
+  bindEvents() {
+    const c = this.cv;
+    c.addEventListener('mousedown', ev => {
+      const r = c.getBoundingClientRect();
+      const w = this.toWorld(ev.clientX - r.left, ev.clientY - r.top);
+      if (ev.button === 1 || ev.shiftKey) { this.panning = true; this.panStart = { mx: ev.clientX, my: ev.clientY, cx: Engine.camera.x, cy: Engine.camera.y }; return; }
+      const hit = [...Engine.scene].reverse().find(e => {
+        if (!e.visible) return false;
+        if (e.getComponent('text')) { return Math.abs(w.x - e.position.x) < 140 && Math.abs(w.y - e.position.y) < 24; }
+        const rc = e.rect;
+        return w.x >= rc.x && w.x <= rc.x + rc.w && w.y >= rc.y && w.y <= rc.y + rc.h;
+      });
+      Engine.selected = hit || null;
+      UI.renderHierarchy(); UI.renderInspector();
+      if (hit && UI.tool === 'move' && !Engine.playing) { this.dragging = true; this.dragEntity = hit; this.dragOff = { x: w.x - hit.position.x, y: w.y - hit.position.y }; }
+    });
+    window.addEventListener('mousemove', ev => {
+      if (this.panning) {
+        Engine.camera.x = this.panStart.cx - (ev.clientX - this.panStart.mx) / Engine.camera.zoom;
+        Engine.camera.y = this.panStart.cy - (ev.clientY - this.panStart.my) / Engine.camera.zoom;
+      }
+      if (this.dragging) {
+        const r = c.getBoundingClientRect();
+        const w = this.toWorld(ev.clientX - r.left, ev.clientY - r.top);
+        this.dragEntity.position.x = Math.round(w.x - this.dragOff.x);
+        this.dragEntity.position.y = Math.round(w.y - this.dragOff.y);
+        UI.renderInspector();
+      }
+    });
+    window.addEventListener('mouseup', () => { this.panning = this.dragging = false; });
+    c.addEventListener('wheel', ev => {
+      ev.preventDefault();
+      Engine.camera.zoom = Math.min(4, Math.max(0.2, Engine.camera.zoom * (ev.deltaY > 0 ? 0.9 : 1.1)));
+    }, { passive: false });
+    document.querySelectorAll('.asset').forEach(a => a.addEventListener('dragstart', ev => ev.dataTransfer.setData('kind', a.dataset.kind)));
+    c.addEventListener('dragover', ev => ev.preventDefault());
+    c.addEventListener('drop', ev => {
+      ev.preventDefault();
+      const kind = ev.dataTransfer.getData('kind');
+      const r = c.getBoundingClientRect();
+      const w = this.toWorld(ev.clientX - r.left, ev.clientY - r.top);
+      const e = Engine.spawnPrefab(kind, Math.round(w.x), Math.round(w.y));
+      Engine.selected = e;
+      UI.renderHierarchy(); UI.renderInspector();
+      Log.push('Создан префаб: ' + e.name, 'ok');
+    });
+  },
+  drawGrid() {
+    const ctx = this.ctx, z = Engine.camera.zoom;
+    const step = 50 * z;
+    if (step < 8) return;
+    ctx.strokeStyle = '#2a2a2e'; ctx.lineWidth = 1;
+    const ox = ((Engine.camera.x * z) % step + step) % step;
+    const oy = ((Engine.camera.y * z) % step + step) % step;
+    ctx.beginPath();
+    for (let x = ox; x < this.cv.width; x += step) { ctx.moveTo(x, 0); ctx.lineTo(x, this.cv.height); }
+    for (let y = oy; y < this.cv.height; y += step) { ctx.moveTo(0, y); ctx.lineTo(this.cv.width, y); }
+    ctx.stroke();
+    const o = this.toScreen(0, 0);
+    ctx.strokeStyle = '#5a5a60'; ctx.beginPath();
+    ctx.moveTo(o.x, 0); ctx.lineTo(o.x, this.cv.height);
+    ctx.moveTo(0, o.y); ctx.lineTo(this.cv.width, o.y);
+    ctx.stroke();
+  },
+  draw() {
+    const ctx = this.ctx, z = Engine.camera.zoom;
+    ctx.clearRect(0, 0, this.cv.width, this.cv.height);
+    if (document.getElementById('gridChk').checked) this.drawGrid();
+    Engine.scene.forEach(e => {
+      if (!e.visible) return;
+      const s = this.toScreen(e.position.x, e.position.y);
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.rotate(e.rotation * Math.PI / 180);
+      ctx.scale(e.scale.x * z, e.scale.y * z);
+      const spr = e.getComponent('sprite'), txt = e.getComponent('text');
+      if (txt) {
+        ctx.fillStyle = txt.color; ctx.font = txt.size + 'px Segoe UI';
+        ctx.textAlign = 'center'; ctx.fillText(txt.text, 0, txt.size / 3);
+      } else if (spr) {
+        ctx.fillStyle = spr.color;
+        if (spr.shape === 'circle') { ctx.beginPath(); ctx.arc(0, 0, spr.radius, 0, Math.PI * 2); ctx.fill(); }
+        else ctx.fillRect(-spr.width / 2, -spr.height / 2, spr.width, spr.height);
+      }
+      ctx.restore();
+      if (e === Engine.selected) {
+        const rc = e.rect;
+        const a = this.toScreen(rc.x, rc.y), b = this.toScreen(rc.x + rc.w, rc.y + rc.h);
+        ctx.strokeStyle = '#4f8cff'; ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]);
+        ctx.strokeRect(a.x - 3, a.y - 3, (b.x - a.x) + 6, (b.y - a.y) + 6);
+        ctx.setLineDash([]);
+      }
+    });
+  }
+};
+
+/* ============ UI ============ */
+const UI = {
+  tool: 'move', editingScriptFor: null,
+  renderHierarchy() {
+    const el = document.getElementById('entityList');
+    el.innerHTML = '';
+    Engine.scene.forEach(e => {
+      const d = document.createElement('div');
+      d.className = 'item' + (e === Engine.selected ? ' sel' : '');
+      let badges = '';
+      if (e.getComponent('physics')) badges += '<span class="tag">P</span>';
+      if (e.getComponent('script')) badges += '<span class="tag">S</span>';
+      d.innerHTML = '<span class="nm"></span>' + badges + '<span class="eye"></span>';
+      d.querySelector('.nm').textContent = e.name;
+      const eye = d.querySelector('.eye');
+      eye.textContent = e.visible ? '👁' : '🚫';
+      eye.title = 'Показать/скрыть';
+      d.onclick = () => { Engine.selected = e; this.renderHierarchy(); this.renderInspector(); };
+      d.ondblclick = () => { const n = prompt('Новое имя:', e.name); if (n) { e.name = n; this.renderHierarchy(); } };
+      eye.onclick = ev => { ev.stopPropagation(); e.visible = !e.visible; this.renderHierarchy(); };
+      el.appendChild(d);
+    });
+  },
+  renderInspector() {
+    const b = document.getElementById('inspBody');
+    const e = Engine.selected;
+    if (!e) { b.innerHTML = '<div style="color:#777;padding:10px">Выберите объект</div>'; return; }
+    b.innerHTML = '';
+    const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+    const sec = (title, inner) => {
+      const d = document.createElement('div'); d.className = 'comp';
+      const h = document.createElement('h4'); h.textContent = title;
+      const f = document.createElement('div'); f.className = 'fields'; f.innerHTML = inner;
+      d.appendChild(h); d.appendChild(f); b.appendChild(d); return d;
+    };
+    sec('Transform',
+      '<div class="row"><label>Позиция</label><div class="vec"><input type="number" id="tpx" value="' + e.position.x + '"><span>X</span><input type="number" id="tpy" value="' + e.position.y + '"><span>Y</span></div></div>' +
+      '<div class="row"><label>Поворот°</label><input type="number" id="trot" value="' + e.rotation + '"></div>' +
+      '<div class="row"><label>Масштаб</label><div class="vec"><input type="number" step="0.1" id="tsx" value="' + e.scale.x + '"><span>X</span><input type="number" step="0.1" id="tsy" value="' + e.scale.y + '"><span>Y</span></div></div>');
+    const spr = e.getComponent('sprite');
+    if (spr) sec('Sprite',
+      '<div class="row"><label>Форма</label><select id="sp-shape"><option value="rect"' + (spr.shape === 'rect' ? ' selected' : '') + '>Прямоугольник</option><option value="circle"' + (spr.shape === 'circle' ? ' selected' : '') + '>Круг</option></select></div>' +
+      '<div class="row"><label>Цвет</label><input type="color" id="sp-color" value="' + spr.color + '" style="width:44px;padding:0;height:26px"></div>' +
+      '<div class="row"><label>Ширина</label><input type="number" id="sp-w" value="' + spr.width + '"></div>' +
+      '<div class="row"><label>Высота</label><input type="number" id="sp-h" value="' + spr.height + '"></div>' +
+      '<div class="row"><label>Радиус</label><input type="number" id="sp-r" value="' + spr.radius + '"></div>');
+    const txt = e.getComponent('text');
+    if (txt) sec('Text',
+      '<div class="row"><label>Текст</label><input type="text" id="tx-t" value="' + esc(txt.text) + '"></div>' +
+      '<div class="row"><label>Размер</label><input type="number" id="tx-s" value="' + txt.size + '"></div>' +
+      '<div class="row"><label>Цвет</label><input type="color" id="tx-c" value="' + txt.color + '" style="width:44px;padding:0;height:26px"></div>');
+    const phy = e.getComponent('physics');
+    if (phy) sec('Physics',
+      '<div class="row"><label>Статический</label><input type="checkbox" id="ph-static"' + (phy.isStatic ? ' checked' : '') + '></div>' +
+      '<div class="row"><label>Гравитация</label><input type="number" step="0.1" id="ph-g" value="' + phy.gravity + '"></div>' +
+      '<div class="row"><label>Упругость</label><input type="number" step="0.05" id="ph-b" value="' + phy.bounciness + '"></div>' +
+      '<div class="row"><label>Трение</label><input type="number" step="0.05" id="ph-f" value="' + phy.friction + '"></div>');
+    const spn = e.getComponent('spawner');
+    if (spn) sec('Spawner',
+      '<div class="row"><label>Интервал(с)</label><input type="number" step="0.1" id="spw-i" value="' + spn.interval + '"></div>' +
+      '<div class="row"><label>Префаб</label><select id="spw-p">' + ['box', 'ball', 'enemy'].map(k => '<option' + (spn.prefab === k ? ' selected' : '') + '>' + k + '</option>').join('') + '</select></div>');
+    const sc = e.getComponent('script');
+    if (sc) {
+      const d = sec('Script 📜', '<div style="color:#888;font-size:10px;font-family:monospace;white-space:pre;max-height:52px;overflow:hidden">' + esc(sc.code.split('\n').slice(0, 3).join('\n')) + '…</div>');
+      const btn = document.createElement('button');
+      btn.textContent = '✏️ Открыть редактор';
+      btn.style.marginTop = '6px';
+      btn.onclick = () => this.openScript(e);
+      d.querySelector('.fields').appendChild(btn);
+    }
+    const add = document.createElement('div'); add.className = 'comp';
+    const ah = document.createElement('h4'); ah.textContent = '+ Добавить компонент';
+    const af = document.createElement('div'); af.className = 'fields';
+    af.innerHTML = '<div class="row"><label>Компонент</label><select id="addComp"><option value="">— выбрать —</option><option value="sprite">Sprite</option><option value="physics">Physics</option><option value="text">Text</option><option value="spawner">Spawner</option><option value="script">Script</option></select></div>';
+    add.appendChild(ah); add.appendChild(af); b.appendChild(add);
+    this.wireEvents(e);
+  },
+  wireEvents(e) {
+    const b = document.getElementById('inspBody');
+    const $ = id => b.querySelector('#' + id);
+    const bindNum = (id, fn) => { const el = $(id); if (el) el.oninput = () => fn(parseFloat(el.value) || 0); };
+    bindNum('tpx', v => e.position.x = v); bindNum('tpy', v => e.position.y = v);
+    bindNum('trot', v => e.rotation = v);
+    bindNum('tsx', v => e.scale.x = v || 1); bindNum('tsy', v => e.scale.y = v || 1);
+    const spr = e.getComponent('sprite');
+    if (spr && $('sp-shape')) {
+      $('sp-shape').onchange = () => { spr.shape = $('sp-shape').value; this.renderInspector(); };
+      $('sp-color').oninput = () => spr.color = $('sp-color').value;
+      bindNum('sp-w', v => spr.width = v); bindNum('sp-h', v => spr.height = v); bindNum('sp-r', v => spr.radius = v);
+    }
+    const txt = e.getComponent('text');
+    if (txt && $('tx-t')) {
+      $('tx-t').oninput = () => txt.text = $('tx-t').value;
+      bindNum('tx-s', v => txt.size = v);
+      $('tx-c').oninput = () => txt.color = $('tx-c').value;
+    }
+    const phy = e.getComponent('physics');
+    if (phy && $('ph-static')) {
+      $('ph-static').onchange = () => phy.isStatic = $('ph-static').checked;
+      bindNum('ph-g', v => phy.gravity = v); bindNum('ph-b', v => phy.bounciness = v); bindNum('ph-f', v => phy.friction = v);
+    }
+    const spn = e.getComponent('spawner');
+    if (spn && $('spw-i')) {
+      bindNum('spw-i', v => spn.interval = v);
+      $('spw-p').onchange = () => spn.prefab = $('spw-p').value;
+    }
+    if ($('addComp')) $('addComp').onchange = () => {
+      const t = $('addComp').value; if (!t) return;
+      if (t === 'sprite') e.addComponent(new Sprite());
+      if (t === 'physics') e.addComponent(new Physics());
+      if (t === 'text') e.addComponent(new TextComp());
+      if (t === 'spawner') e.addComponent(new Spawner());
+      if (t === 'script') e.addComponent(new Script('// self.update = (dt) => { ... }'));
+      this.renderInspector(); this.renderHierarchy();
+    };
+  },
+  openScript(e) {
+    this.editingScriptFor = e;
+    document.getElementById('scriptCode').value = e.getComponent('script').code;
+    document.getElementById('scriptModal').style.display = 'flex';
+  },
+  closeScript() { document.getElementById('scriptModal').style.display = 'none'; },
+  applyScript() {
+    const e = this.editingScriptFor;
+    if (e) {
+      e.getComponent('script').code = document.getElementById('scriptCode').value;
+      Log.push('Скрипт объекта "' + e.name + '" обновлён.', 'ok');
+    }
+    this.closeScript(); this.renderInspector();
+  },
+  addEntity(kind) {
+    const e = Prefabs.create(kind || 'box', 0, 0);
+    Engine.scene.push(e); Engine.selected = e;
+    this.renderHierarchy(); this.renderInspector();
+    Log.push('Создан объект: ' + e.name);
+  },
+  duplicate() {
+    const s = Engine.selected; if (!s) return;
+    const c = JSON.parse(JSON.stringify(s));
+    c.id = ++Entity._id; c.name = s.name + ' (copy)'; c.position.x += 60;
+    Engine.scene.push(c); Engine.selected = c;
+    this.renderHierarchy(); this.renderInspector();
+  },
+  remove() {
+    const s = Engine.selected; if (!s) return;
+    Engine.scene = Engine.scene.filter(x => x !== s);
+    Engine.selected = null;
+    this.renderHierarchy(); this.renderInspector();
+    Log.push('Удалён объект: ' + s.name, 'warn');
+  },
+  saveScene() {
+    localStorage.setItem('webforge_scene', JSON.stringify(Engine.scene));
+    Log.push('Сцена сохранена (' + Engine.scene.length + ' объектов).', 'ok');
+  },
+  loadScene() {
+    const raw = localStorage.getItem('webforge_scene');
+    if (!raw) { Log.push('Сохранённых сцен нет.', 'warn'); return; }
+    Engine.scene = JSON.parse(raw); Engine.selected = null;
+    Entity._id = Math.max(0, ...Engine.scene.map(e2 => e2.id));
+    this.renderHierarchy(); this.renderInspector();
+    Log.push('Сцена загружена.', 'ok');
+  }
+};
+
+/* ============ ИГРОВОЙ ЦИКЛ ============ */
+let lastT = performance.now();
+function loop(t) {
+  const dt = Math.min((t - lastT) / 1000, 0.05);
+  lastT = t;
+  Engine.update(dt);
+  Viewport.draw();
+  requestAnimationFrame(loop);
+}
+
+/* --- Стартовая сцена --- */
+function bootstrap() {
+  Input.init();
+  Viewport.init();
+  Engine.scene.push(Prefabs.create('ground', 0, 150));
+  const g2 = Prefabs.create('ground', 350, 60); Engine.scene.push(g2);
+  Engine.scene.push(Prefabs.create('player', 0, -100));
+  Engine.scene.push(Prefabs.create('enemy', 260, 20));
+  Engine.scene.push(Prefabs.create('spawner', -280, -120));
+  Engine.scene.push(Prefabs.create('text', 0, -180));
+  Engine.selected = Engine.scene.find(e => e.name === 'Player');
+  UI.renderHierarchy(); UI.renderInspector();
+  Log.push('WebForge Engine готов. Перетащи префаб во вьюпорт или нажми ▶ Play.', 'ok');
+  Log.push('Управление игроком: стрелки / WASD, прыжок — Space.', 'ok');
+  requestAnimationFrame(loop);
+}
+window.addEventListener('DOMContentLoaded', bootstrap);
+</script>
+</body>
+</html>
